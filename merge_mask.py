@@ -177,11 +177,62 @@ def process_episode(args: Tuple[int, Path, Path, int, int, bool, bool, bool]) ->
         cap_sim.release()
         cap_sam.release()
 
+    overlay_msg = ""
+    overlay_written = False
+    overlay_path = sam_root / str(episode) / "merged_mask_overlay.mp4"
+
     if mask_frames:
         stack = np.stack(mask_frames, axis=0).astype(np.uint8)
         iio.imwrite(str(out_mp4), stack, fps=30, codec='libx264')
 
-    return episode, True, f"{frames_written} frames"
+        source_path = sam_root / str(episode) / "source_video.mp4"
+        if not source_path.exists():
+            source_path = sim_root / f"{episode}" / "source_video.mp4"
+
+        if source_path.exists():
+            src_cap = cv.VideoCapture(str(source_path))
+            try:
+                if src_cap.isOpened():
+                    overlay_frames = []
+                    green = np.array([0, 255, 0], dtype=np.float32)
+                    for mask_frame in mask_frames:
+                        ok_src, src_frame = src_cap.read()
+                        if not ok_src:
+                            overlay_msg = "overlay skipped: ran out of source frames"
+                            break
+
+                        frame_rgb = cv.cvtColor(src_frame, cv.COLOR_BGR2RGB)
+                        mask_bool = mask_frame[..., 0] > 0
+                        if mask_bool.any():
+                            blended = (
+                                0.5 * frame_rgb[mask_bool].astype(np.float32)
+                                + 0.5 * green
+                            )
+                            frame_rgb[mask_bool] = np.clip(blended, 0, 255).astype(np.uint8)
+                        overlay_frames.append(frame_rgb.astype(np.uint8))
+
+                    else:
+                        iio.imwrite(
+                            str(overlay_path),
+                            np.stack(overlay_frames, axis=0),
+                            fps=30,
+                            codec='libx264',
+                        )
+                        overlay_written = True
+                else:
+                    overlay_msg = "overlay skipped: unable to open source video"
+            finally:
+                src_cap.release()
+        else:
+            overlay_msg = f"overlay skipped: missing source video ({source_path})"
+
+    message = f"{frames_written} frames"
+    if overlay_written:
+        message += f"; overlay written to {overlay_path.name}"
+    elif overlay_msg:
+        message += f"; {overlay_msg}"
+
+    return episode, True, message
 
 def parse_episode_list(spec: str) -> List[int]:
     eps: List[int] = []
@@ -255,7 +306,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-'''
-python /home/guanhuaji/test/oxe-aug/sam2/merge_mask.py --dataset jaco_play --split train --start 0 --end 5 --max_pix 10
-'''
