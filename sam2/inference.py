@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 from tqdm import tqdm
 import sys
+import runpy
 
 import imageio.v3 as iio
 import cv2
@@ -18,6 +19,59 @@ import argparse
 
 MODEL_CHECKPOINT = "./checkpoints/checkpoint_150.pt"
 MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_b+.yaml"
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ROVI_EXTENSION_DIR = REPO_ROOT / "rovi-aug-extension"
+ROVI_CONFIG_PATH = ROVI_EXTENSION_DIR / "config.py"
+_DATASET_CONFIG = None
+
+# -------------------- Config helpers --------------------
+
+def _load_dataset_config():
+    """Load and cache the dataset config dictionary from rovi-aug-extension/config.py."""
+    global _DATASET_CONFIG
+    if _DATASET_CONFIG is not None:
+        return _DATASET_CONFIG
+
+    if not ROVI_CONFIG_PATH.exists():
+        raise FileNotFoundError(f"Unable to locate config.py at {ROVI_CONFIG_PATH}")
+
+    rovi_root_str = str(ROVI_EXTENSION_DIR)
+    if rovi_root_str not in sys.path:
+        sys.path.insert(0, rovi_root_str)
+
+    module_globals = runpy.run_path(str(ROVI_CONFIG_PATH))
+    config_dict = module_globals.get("config")
+    if not isinstance(config_dict, dict):
+        raise ValueError(f"No 'config' dictionary found in {ROVI_CONFIG_PATH}")
+
+    _DATASET_CONFIG = config_dict
+    return _DATASET_CONFIG
+
+
+def resolve_dataset_directory(dataset_name: str, split: str) -> Path:
+    """Resolve dataset directory from config entry and split name."""
+    config_dict = _load_dataset_config()
+    dataset_cfg = config_dict.get(dataset_name)
+    if dataset_cfg is None:
+        sample_keys = ", ".join(sorted(config_dict.keys())[:8])
+        raise ValueError(
+            f"Dataset '{dataset_name}' not found in config.py. Example keys: {sample_keys}"
+        )
+
+    out_path = dataset_cfg.get("out_path")
+    if not out_path:
+        raise ValueError(f"Dataset '{dataset_name}' is missing the 'out_path' field in config.py")
+
+    dataset_root = Path(out_path)
+    if not dataset_root.is_absolute():
+        dataset_root = (ROVI_CONFIG_PATH.parent / dataset_root).resolve()
+
+    resolved_dir = dataset_root / dataset_name / split
+    if not resolved_dir.exists():
+        raise FileNotFoundError(f"Resolved dataset directory does not exist: {resolved_dir}")
+
+    return resolved_dir
 
 # -------------------- Utilities --------------------
 
@@ -252,6 +306,7 @@ def worker_fn(episodes, directory, gpu_idx, counter, mute_output):
     img_predictor = SAM2ImagePredictor(sam2_model)
 
     for ep in episodes:
+        episode_start = time.perf_counter()
         ep_dir = Path(directory) / str(ep)
         video_path = ep_dir / "source_video.mp4"
         if not video_path.exists():
@@ -265,6 +320,9 @@ def worker_fn(episodes, directory, gpu_idx, counter, mute_output):
             vid_predictor, img_predictor
         )
 
+        elapsed = time.perf_counter() - episode_start
+        print(f"[TIMER] Episode {ep} completed in {elapsed:.2f}s")
+
         with counter.get_lock():
             counter.value += 1
 
@@ -275,17 +333,26 @@ def main():
     parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose logging')
     parser.add_argument('--start', type=int, default=None, help='Start episode (inclusive)')
     parser.add_argument('--end',   type=int, default=None, help='End episode (exclusive)')
-    parser.add_argument('--directory', type=str, required=True,
-                        help='Root directory of data; each episode is a numeric subdirectory')
+    parser.add_argument('--dataset', type=str, required=True,
+                        help='Dataset key defined in rovi-aug-extension/config.py')
+    parser.add_argument('--split', type=str, required=True,
+                        help='Dataset split to process (e.g. train, val, test)')
     parser.add_argument('--num_workers', type=int, default=8,
                         help='Number of parallel processes / GPUs (≤ visible GPUs)')
     args = parser.parse_args()
+
+    try:
+        dataset_dir = resolve_dataset_directory(args.dataset, args.split)
+    except (ValueError, FileNotFoundError) as exc:
+        raise SystemExit(str(exc))
+
+    dataset_dir_str = str(dataset_dir)
 
     # — Generate list of episodes to process —
     if args.start is not None and args.end is not None:
         episodes = list(range(args.start, args.end))
     else:
-        episodes = sorted(int(p.name) for p in Path(args.directory).iterdir()
+        episodes = sorted(int(p.name) for p in dataset_dir.iterdir()
                           if p.is_dir() and p.name.isdigit())
     if not episodes:
         raise SystemExit("No episode directories found")
@@ -306,7 +373,7 @@ def main():
             continue
         p = mp.Process(
             target=worker_fn,
-            args=(ep_chunk, args.directory, gpu_idx, counter, mute_output),
+            args=(ep_chunk, dataset_dir_str, gpu_idx, counter, mute_output),
             daemon=False
         )
         p.start()
@@ -334,10 +401,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-"""
-Example:
-python /home/guanhuaji/test/oxe-aug/sam2/sam2/inference.py \
-  --directory /home/guanhuaji/test/oxe-aug/videos/jaco_play/train \
-  --start 0 --end 10
-"""

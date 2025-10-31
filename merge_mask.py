@@ -306,3 +306,11 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+'''
+python /home/guanhuaji/test/oxe-aug/sam2/merge_mask.py --dataset ucsd_kitchen_dataset_converted_externally_to_rlds \
+    --split train --start 0 --end 10
+
+python merge_mask.py --dataset ucsd_kitchen_dataset_converted_externally_to_rlds \
+    --split train --start 0 --end 1
+'''
