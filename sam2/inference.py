@@ -315,6 +315,8 @@ def worker_fn(episodes, directory, gpu_idx, counter, mute_output):
         mask_mp4 = ep_dir / "sam_mask.mp4"
         overlay_mp4 = ep_dir / "sam_overlay.mp4"
 
+        print(mask_mp4, overlay_mp4)
+
         best_image_to_video_validation(
             str(video_path), str(mask_mp4), str(overlay_mp4),
             vid_predictor, img_predictor

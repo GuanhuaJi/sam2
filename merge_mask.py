@@ -78,9 +78,6 @@ def discover_common_episodes(sim_root: Path, sam_root: Path) -> List[int]:
     eps = _numeric_dirs(sim_root) & _numeric_dirs(sam_root)
     return sorted(eps)
 
-DEFAULT_OUTPUT_ROOT = Path('/home/guanhuaji/test/oxe-aug/videos')
-
-
 def _resolve_roots(dataset: str, split: str):
     dataset_cfg = config.get(dataset, {})
     if not dataset_cfg:
@@ -89,10 +86,6 @@ def _resolve_roots(dataset: str, split: str):
     out_cfg = dataset_cfg.get('out_path')
     if out_cfg:
         out_root = Path(out_cfg)
-        if not out_root.is_absolute():
-            out_root = Path(DEFAULT_OUTPUT_ROOT) / out_root
-    else:
-        out_root = Path(DEFAULT_OUTPUT_ROOT)
 
     sim_root = out_root / dataset / split
 
@@ -265,7 +258,7 @@ def parse_args():
     p.add_argument("--split", required=True, help="Dataset split (train/val/test)")
     p.add_argument("--start", type=int, default=None, help="first episode (inclusive)")
     p.add_argument("--end",   type=int, default=None, help="last  episode (exclusive)")
-    p.add_argument("--num_workers", type=int, default=min(20, cpu_count()), help="number of processes")
+    p.add_argument("--num_workers", type=int, default=min(1, cpu_count()), help="number of processes")
     p.add_argument("--max_pix",    type=int, default=10, help="best-shift search radius (px)")
     p.add_argument("--sam_radius", type=int, default=60, help="sam mis-detection crop radius; 0 = disable")
     p.add_argument("--sim_only", action="store_true", help="use only sim mask, skip sam mask")
