@@ -21,14 +21,14 @@ MODEL_CHECKPOINT = "./checkpoints/checkpoint_150.pt"
 MODEL_CONFIG = "configs/sam2.1/sam2.1_hiera_b+.yaml"
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ROVI_EXTENSION_DIR = REPO_ROOT / "rovi-aug-extension"
+ROVI_EXTENSION_DIR = REPO_ROOT / "AugE-Toolkit"
 ROVI_CONFIG_PATH = ROVI_EXTENSION_DIR / "config.py"
 _DATASET_CONFIG = None
 
 # -------------------- Config helpers --------------------
 
 def _load_dataset_config():
-    """Load and cache the dataset config dictionary from rovi-aug-extension/config.py."""
+    """Load and cache the dataset config dictionary from AugE-Toolkit/config.py."""
     global _DATASET_CONFIG
     if _DATASET_CONFIG is not None:
         return _DATASET_CONFIG
@@ -336,7 +336,7 @@ def main():
     parser.add_argument('--start', type=int, default=None, help='Start episode (inclusive)')
     parser.add_argument('--end',   type=int, default=None, help='End episode (exclusive)')
     parser.add_argument('--dataset', type=str, required=True,
-                        help='Dataset key defined in rovi-aug-extension/config.py')
+                        help='Dataset key defined in AugE-Toolkit/config.py')
     parser.add_argument('--split', type=str, required=True,
                         help='Dataset split to process (e.g. train, val, test)')
     parser.add_argument('--num_workers', type=int, default=8,

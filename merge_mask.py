@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE_ROOT = ROOT / "rovi-aug-extension"
+CORE_ROOT = ROOT / "AugE-Toolkit"
 if str(CORE_ROOT) not in sys.path:
     sys.path.insert(0, str(CORE_ROOT))
 
